@@ -1,0 +1,84 @@
+<%# This is the nginx site configuration file for samplecompany-portal %>
+
+<% node['samplecompany-portal']['server_alias'].each do |name, server_alias| %>
+  <% if server_alias %>
+server {
+    listen       80;
+    server_name  <%= server_alias %>;
+    return       301 https://<%= name %>$request_uri;
+}
+  <% end %>
+<% end %>
+
+<% if node.chef_environment == "production" %>
+server {
+  listen 80;
+  server_name <%= @server_name.each{|name| "#{name}" }.join(" ") %>;
+  return 301 https://$host$request_uri;
+}
+<% end %>
+
+server {
+<% if node.chef_environment == "production" %>
+  listen 443;
+  ssl on;
+  ssl_certificate /etc/nginx/ssl/<%= node['samplecompany-portal']['lb_name'] %>.crt;
+  ssl_certificate_key /etc/nginx/ssl/<%= node['samplecompany-portal']['lb_name'] %>.key;
+  ssl_client_certificate /etc/nginx/ssl/<%= node['samplecompany-portal']['lb_name'] %>.ca;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+<% else %>
+  listen 80;
+<% end %>
+  charset utf-8;
+  
+  server_name <%= @server_name.each{|name| "#{name}" }.join(" ") %>;
+  access_log <%= node['nginx']['log_dir'] %>/samplecompany.portal.access.log;
+  error_log <%= node['nginx']['log_dir'] %>/samplecompany.portal.error.log;
+  
+  rewrite_log off;
+  
+  root   <%= File.join(@app_dir, 'current', 'public') %>;
+  index index.php;
+  
+  location / {
+    try_files $uri $uri/ /index.php$is_args$args;
+    rewrite ^/(.*)/$ /$1 redirect;
+  }
+  
+  # We block access to the .htaccess files
+  location ~ \.htaccess {
+    deny all;
+  }
+  
+  location ~*  \.(jpg|jpeg|png|gif|ico|css|js)$ {
+    expires 1y;
+  }
+  
+  # Concerns all PHP files (files ending with ".php") the tilde means that we are using a REGEX instead of a full HTTP path. REGEX must be PCRE compliant.
+  location ~ \.php(?:/.+)?$ {
+    # Standard rewrite rule. Break means that we won't try to apply any other rewrite rule as soon as this one has been
+    rewrite ^(.+.php)(?:/(.+))$ $1?request=$2 break;
+    include /etc/nginx/fastcgi_params;
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param APP_ENV <%= node['samplecompany-portal']['zend_env'] %>;
+  }
+  
+  # Some specific locations to take care of (the = means that we require an exact match and that we will stop searching for more specific matches if this location is met (I guess it includes the get parameters)
+  location = /favicon.ico {
+    access_log off;
+    log_not_found off;
+  }
+  
+  location = /robots.txt {
+    access_log off;
+    log_not_found off;
+  }
+  
+  location ~ /\. {
+    deny all;
+    access_log off;
+    log_not_found off;
+  }
+}
