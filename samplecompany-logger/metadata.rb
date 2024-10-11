@@ -1,0 +1,6 @@
+name             "samplecompany-logger"
+depends          "samplecompany-webserver"
+depends          "nginx", "2.7.6"
+depends          "nodejs", "2.4.4"
+depends          "redis", "3.0.4"
+depends          "logrotate", "1.9.2"
