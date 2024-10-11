@@ -1,0 +1,331 @@
+<%# This is the nginx site configuration file for samplecompany-game %>
+
+server {
+  location /elb-status {
+    access_log off;
+    return 200;
+  }
+}
+
+server {
+  listen 80;
+  server_name ~^(?<gamename>.+)\.<%= node['samplecompany-game']['network_2'].gsub! '.', '\.' %>$ ~^(?<gamename>.+)\.network2\.com$;
+  
+  location / {
+    proxy_pass http://127.0.0.1/network2/$gamename$request_uri;
+    proxy_set_header Host <%= node['samplecompany-game']['lb_name'] %>;
+  }
+}
+
+server {
+  listen 80;
+  server_name ~^(?<gamename>.+)\.<%= node['samplecompany-game']['network_3'].gsub! '.', '\.' %>$ ~^(?<gamename>.+)\.network3\.com$ ~^(?<gamename>.+)\.network3-games\.com$;
+  
+  location / {
+    proxy_pass http://127.0.0.1/network3/$gamename$request_uri;
+    proxy_set_header Host <%= node['samplecompany-game']['lb_name'] %>;
+  }
+}
+
+server {
+  listen 80;
+  server_name ~<%= node['samplecompany-game']['network_4'].gsub! '.', '\.' %>$ ~supergame\.network4\.com$;
+  
+  location / {
+    proxy_pass http://127.0.0.1/network4/supergame/$request_uri;
+    proxy_set_header Host <%= node['samplecompany-game']['lb_name'] %>;
+  }
+}
+
+server {
+  listen 80;
+  server_name <%= node['samplecompany-game']['network_1'] %>;
+  root <%= File.join(@app_dir, 'current') %>;
+  index index.html index.htm index.php;
+  <% if node.chef_environment == "production" -%>	
+  access_log off;
+  error_log /var/log/nginx/<%= node['samplecompany-game']['network_1'] %>.error.log error;
+  <% elsif %>
+  access_log /var/log/nginx/<%= node['samplecompany-game']['network_1'] %>.access.log;
+  error_log /var/log/nginx/<%= node['samplecompany-game']['network_1'] %>.error.log warn;
+  <% end -%>
+
+  # Network1 SSO integration for SuperGame
+  location = / {
+    if ($host = "<%= node['samplecompany-game']['network_1'] %>") {
+      rewrite ^ http://$host/supergame;
+    }
+  }
+
+  #CORS support with support for preflight requests.
+  location ~* /assets/img/avatars/ {
+    if ($request_method = 'OPTIONS') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      #
+      # Om nom nom cookies
+      #
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      #
+      # Custom headers and headers various browsers *should* be OK with but aren't
+      #
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+      #
+      # Tell client that this pre-flight info is valid for 20 days
+      #
+      add_header 'Access-Control-Max-Age' 1728000;
+      add_header 'Content-Type' 'text/plain charset=UTF-8';
+      add_header 'Content-Length' 0;
+      return 204;
+    }
+    if ($request_method = 'POST') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+    }
+    if ($request_method = 'GET') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+    }
+  }
+
+  location / {
+    try_files $uri /index.php?$args;
+  }
+
+  location = /index.php {
+    include /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param KOHANA_ENV <%= node['samplecompany-game']['kohana_env'] %>;
+    fastcgi_param KOHANA_MAINTENANCE <%= node['samplecompany-game']['maintenance'].upcase %>;
+  }
+
+  location ~ .*\.(php|php5)?$
+  {
+    include /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+  
+  # Allow SampleCompany domains to load assets
+  location ~* /assets/ {
+    access_log off;
+    if ($http_origin ~ "samplecompany.eu$") {
+     add_header 'Access-Control-Allow-Origin' $http_origin;
+    }
+    if ($http_origin ~ "samplecompany.com$") {
+     add_header 'Access-Control-Allow-Origin' $http_origin;
+    }
+  }
+  
+  # Allow games to show profile pictures
+  location ~* /assets/img/avatars/ {
+    add_header 'Access-Control-Allow-Origin' '*';
+  }
+}
+
+<% if node.chef_environment == "local" -%>
+server {
+  listen 80;
+  server_name <%= node['samplecompany-game']['server_name'].each{|name| "#{name}" }.join(" ") %>;
+  return 301 https://$host$request_uri;
+}
+<% end -%>
+
+server {
+  <% if node.chef_environment != "local" -%>	
+  listen 80;
+  <% end -%>
+  listen 443;
+  ssl on;
+  ssl_certificate /etc/nginx/ssl/<%= node['samplecompany-game']['lb_name'] %>.crt;
+  ssl_certificate_key /etc/nginx/ssl/<%= node['samplecompany-game']['lb_name'] %>.key;
+  ssl_client_certificate /etc/nginx/ssl/<%= node['samplecompany-game']['lb_name'] %>.ca;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+
+  server_name <%= node['samplecompany-game']['server_name'].each{|name| "#{name}" }.join(" ") %>;
+  <% if node.chef_environment == "production" -%>	
+  access_log off;
+  error_log /var/log/nginx/<%= node['samplecompany-game']['lb_name'] %>.error.log error;
+  <% elsif %>
+  access_log /var/log/nginx/<%= node['samplecompany-game']['lb_name'] %>.access.log;
+  error_log /var/log/nginx/<%= node['samplecompany-game']['lb_name'] %>.error.log warn;
+  <% end -%>
+
+  root <%= File.join(@app_dir, 'current') %>;
+  index index.html index.htm index.php;
+  
+  <% if node.chef_environment == "staging" -%>
+  if ($host = "oldgame.samplecompany.com"){
+    rewrite ^(.*)$ http://<%= node['samplecompany-game']['lb_name'] %>$1 permanent;
+    break;
+  }
+  location = /demo.html {
+    rewrite ^ http://game.samplecompany.com/demo permanent;
+  }
+  <% end -%>
+
+  location ~* /corporate {
+    rewrite /app/(.*) /$1 break;
+    proxy_pass http://<%= node['samplecompany-game']['corporate_site'] %>;
+    proxy_redirect http://localhost/ http://<%= node['samplecompany-game']['corporate_site'] %>/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+  
+  ## External portal
+  location = / {
+    rewrite ^ https://$host/en/;
+  }
+
+  location ~* ^/(game|<%= node['samplecompany-game']['portal_languages'].each{|language| "#{language}" }.join("|") %>) {
+    proxy_pass https://<%= node['samplecompany-game']['portal_ip'] %>;
+    proxy_redirect https://localhost/ https://<%= node['samplecompany-game']['portal_ip'] %>/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  }
+  
+  location / {
+    try_files $uri /index.php?$args;
+  }
+
+  location = /index.php {
+    include /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+    fastcgi_param KOHANA_ENV <%= node['samplecompany-game']['kohana_env'] %>;
+    fastcgi_param KOHANA_MAINTENANCE <%= node['samplecompany-game']['maintenance'] %>;
+  }
+
+  #CORS support with support for preflight requests.
+  location ~* /assets/img/avatars/ {
+    if ($request_method = 'OPTIONS') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      #
+      # Om nom nom cookies
+      #
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      #
+      # Custom headers and headers various browsers *should* be OK with but aren't
+      #
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+      #
+      # Tell client that this pre-flight info is valid for 20 days
+      #
+      add_header 'Access-Control-Max-Age' 1728000;
+      add_header 'Content-Type' 'text/plain charset=UTF-8';
+      add_header 'Content-Length' 0;
+      return 204;
+    }
+    if ($request_method = 'POST') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+    }
+    if ($request_method = 'GET') {
+      add_header 'Access-Control-Allow-Origin' '*';
+      add_header 'Access-Control-Allow-Credentials' 'true';
+      add_header 'Access-Control-Allow-Methods' 'GET, POST, OPTIONS';
+      add_header 'Access-Control-Allow-Headers' 'DNT,X-CustomHeader,Keep-Alive,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type';
+    }
+  }
+  
+  location ~ .*\.(php|php5)?$
+  {
+    include /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+  
+  location ~* ^/(modules|application|system|documentation) {
+    return 404;
+  }
+  
+  location ~*  \.(jpg|jpeg|png|gif|ico|css|js)$ {
+    add_header Last-Modified "Thu, 01 Jan 2030 00:00:00 GMT";
+    if_modified_since before;
+  }
+
+  # Block all svn access
+  if ($request_uri ~* ^.*\.svn.*$) {
+    return 404;
+  }
+
+  # Block all git access
+  if ($request_uri ~* ^.*\.git.*$) {
+    return 404;
+  }
+
+  location /nginx_status {
+    stub_status on;
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+  }
+
+  location /apc_clear {
+    access_log     off;
+    allow    127.0.0.1;
+    deny     all;
+    include      /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass   unix:/var/run/php5-fpm.sock;
+    fastcgi_param  SCRIPT_FILENAME /usr/local/bin/apc_clear.php;
+  }
+
+  location ~ /\. { access_log off; log_not_found off; deny all; }
+  location ~ ~$ { access_log off; log_not_found off; deny all; }
+  
+  # Allow SampleCompany domains to load assets
+  location ~* /assets/ {
+    access_log off;
+    if ($http_origin ~ "samplecompany.eu") {
+     add_header 'Access-Control-Allow-Origin' $http_origin;
+    }
+    if ($http_origin ~ "samplecompany.com$") {
+     add_header 'Access-Control-Allow-Origin' $http_origin;
+    }
+  }
+  
+  # Allow games to show profile pictures
+  location ~* /assets/img/avatars/ {
+    add_header 'Access-Control-Allow-Origin' '*';
+  }
+  
+  ### Expire rules for static content
+
+  # cache.appcache, your document html and data
+  location ~* \.(?:manifest|appcache|html?|xml|json)$ {
+    expires -1;
+  # access_log logs/static.log; # I don't usually include a static log
+  }
+
+  # Feed
+  location ~* \.(?:rss|atom)$ {
+    expires 1h;
+    add_header Cache-Control "public";
+  }
+
+  # Media: images, icons, video, audio, HTC
+  location ~* \.(?:jpg|jpeg|gif|png|ico|cur|gz|svg|svgz|mp4|ogg|ogv|webm|htc)$ {
+    expires 1M;
+    access_log off;
+    add_header Cache-Control "public";
+  }
+
+  # CSS and Javascript
+  location ~* \.(?:css|js)$ {
+    expires 1y;
+    access_log off;
+    add_header Cache-Control "public";
+  }
+}
