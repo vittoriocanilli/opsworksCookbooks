@@ -1,0 +1,43 @@
+server {
+  listen 80;
+  server_name <%= @server_name.each{|name| "#{name}" }.join(" ") %>;
+  access_log /var/log/nginx/<%= node['samplecompany-adminold']['server_main_name'] %>.access.log;
+  error_log /var/log/nginx/<%= node['samplecompany-adminold']['server_main_name'] %>.error.log;
+  
+  root <%= node['samplecompany-adminold']['adminold_dir'] %>;
+  
+  auth_basic "Restricted";
+  auth_basic_user_file "/etc/nginx/admin_htpasswd";
+  
+  location ^~ /gametestenvironment {
+    return 301 http://admintool-live.samplecompany.com/kpitool/samplecompany_game_platforms;
+  }
+  
+  location / {
+    index  index.html index.htm index.php;
+  }
+  
+  location ~ .php$ {
+    include /etc/nginx/fastcgi_params;
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+  
+  # Block all svn access
+  if ($request_uri ~* ^.*\.svn.*$) {
+     return 404;
+  }
+  
+  # Block all git access
+  if ($request_uri ~* ^.*\.git.*$) {
+     return 404;
+  }
+  
+  location /nginx_status {
+    stub_status on;
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+  }
+}
