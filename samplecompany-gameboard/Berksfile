@@ -1,0 +1,5 @@
+source "https://supermarket.chef.io"
+
+metadata
+cookbook "composer", "2.3.0"
+cookbook 'logrotate', "1.9.2"

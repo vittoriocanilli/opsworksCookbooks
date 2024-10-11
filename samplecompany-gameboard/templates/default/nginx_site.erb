@@ -1,0 +1,48 @@
+<%# This is the nginx site configuration file for gameboard %>
+
+server {
+	listen 80;
+	server_name <%= @server_name.each{|name| "#{name}" }.join(" ") %> samplecompany_gameboard "";
+	access_log /var/log/nginx/gameboard-dev.samplecompany.com.access.log;
+	error_log  /var/log/nginx/gameboard-dev.samplecompany.com.error.log;
+	
+	root <%= File.join(@app_dir, 'current', 'public') %>;
+	index index.html index.htm index.php;
+	
+	rewrite  "/assets/([0-9]+)/(.*)" /assets/$2;	
+	
+	location / {
+		try_files $uri /index.php?$args;
+	}	 
+
+	location = /index.php {
+		include /etc/nginx/fastcgi_params; #or whatever you named it
+		fastcgi_pass unix:/var/run/php5-fpm.sock;
+		fastcgi_index index.php;
+		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+	}
+
+	location ~* ^/(modules|application|system|documentation) {
+		return 404;
+	}
+
+	# Block all svn access
+	if ($request_uri ~* ^.*\.svn.*$) {
+		return 404;
+	}
+
+	# Block all git access
+	if ($request_uri ~* ^.*\.git.*$) {
+		return 404;
+	}
+
+	location /nginx_status {
+		stub_status on;
+		access_log off;
+		allow 127.0.0.1;
+		deny all;
+	}
+	
+	location ~ /\. { access_log off; log_not_found off; deny all; }
+	location ~ ~$ { access_log off; log_not_found off; deny all; }
+}
