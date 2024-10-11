@@ -1,0 +1,69 @@
+<VirtualHost *:<%= @params[:server_port] %>>
+  ServerName <%= @params[:server_name] %>
+  ServerAlias <%= @params[:server_aliases] %>
+  DocumentRoot <%= @params[:docroot] %>
+
+  <Directory <%= @params[:docroot] %>>
+    Options FollowSymLinks
+    AllowOverride FileInfo Options Authconfig
+    <% if node['apache']['version'] == '2.4' %>
+    Require all granted
+    <% else %>
+    Order allow,deny
+    Allow from all
+    <% end %>
+  </Directory>
+
+  <Directory />
+    Options FollowSymLinks
+    AllowOverride None
+  </Directory>
+
+  LogLevel info
+  ErrorLog <%= node['apache']['log_dir'] %>/<%= @params[:name] %>-error.log
+  CustomLog <%= node['apache']['log_dir'] %>/<%= @params[:name] %>-access.log combined
+
+  RewriteEngine On
+<% unless node['apache']['version'] == '2.4' %>
+  RewriteLog <%= node['apache']['log_dir'] %>/<%= @application_name %>-rewrite.log
+  RewriteLogLevel 0
+<% end %>
+</VirtualHost>
+
+<VirtualHost *:<%= node['apache']['mod_ssl']['port'] %>>
+  ServerName <%= @params[:server_name] %>
+  ServerAlias <%= @params[:server_aliases] %>
+  DocumentRoot <%= @params[:docroot] %>
+  	
+  SSLEngine on
+  SSLProtocol all
+  SSLCertificateFile <%= File.join(node['apache']['dir'], "ssl", "#{node['samplecompany-corporate']['server_name']}.crt") %>
+  SSLCertificateKeyFile <%= File.join(node['apache']['dir'], "ssl", "#{node['samplecompany-corporate']['server_name']}.key") %>
+  SSLCertificateChainFile <%= File.join(node['apache']['dir'], "ssl", "#{node['samplecompany-corporate']['server_name']}.ca") %>
+
+  <Directory <%= @params[:docroot] %>>
+    Options FollowSymLinks
+    AllowOverride FileInfo Options Authconfig
+    <% if node['apache']['version'] == '2.4' %>
+    Require all granted
+    <% else %>
+    Order allow,deny
+    Allow from all
+    <% end %>
+  </Directory>
+
+  <Directory />
+    Options FollowSymLinks
+    AllowOverride None
+  </Directory>
+
+  LogLevel info
+  ErrorLog <%= node['apache']['log_dir'] %>/<%= @params[:name] %>-ssl-error.log
+  CustomLog <%= node['apache']['log_dir'] %>/<%= @params[:name] %>-ssl-access.log combined
+
+  RewriteEngine On
+<% unless node['apache']['version'] == '2.4' %>
+  RewriteLog <%= node['apache']['log_dir'] %>/<%= @application_name %>-ssl-rewrite.log
+  RewriteLogLevel 0
+<% end %>
+</VirtualHost>
