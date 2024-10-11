@@ -1,0 +1,85 @@
+server {
+  location /elb-status {
+    access_log off;
+    return 200;
+  }
+}
+
+server {
+  listen 80;
+  server_name <%= node['samplecompany-apiold']['server_name'].each{|name| "#{name}" }.join(" ") %>;
+  root <%= node['samplecompany-apiold']['api_dir'] %>;
+  index index.html index.htm index.php;
+  <% if node.chef_environment == "production" -%> 
+  access_log off;
+  error_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.error.log error;
+  <% elsif %>
+  access_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.access.log;
+  error_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.error.log warn;
+  <% end -%>
+  
+  rewrite ^/gadget((_[a-z]+)*)/([A-Za-z0-9_]+)/([A-Za-z0-9_]+) /gadget$1/GameProxy.php?platform=$3&game=$4 last;
+  
+  location ~ .php$ {
+    include /etc/nginx/fastcgi_params;
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+  
+  # Block all svn access
+  if ($request_uri ~* ^.*\.svn.*$) {
+     return 404;
+  }
+  
+  # Block all git access
+  if ($request_uri ~* ^.*\.git.*$) {
+     return 404;
+  }
+
+  location /nginx_status {
+    stub_status on;
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+  }
+}
+
+server {
+  listen 443;
+  server_name <%= node['samplecompany-apiold']['server_name'].each{|name| "#{name}" }.join(" ") %>;
+  root <%= node['samplecompany-apiold']['api_dir'] %>;
+  index index.html index.htm index.php;
+  <% if node.chef_environment == "production" -%> 
+  access_log off;
+  error_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.ssl.error.log error;
+  <% elsif %>
+  access_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.ssl.access.log;
+  error_log /var/log/nginx/<%= node['samplecompany-apiold']['lb_name'] %>.ssl.error.log warn;
+  <% end -%>
+  
+  ssl on;
+  ssl_certificate /etc/nginx/ssl/<%= node['samplecompany-apiold']['lb_name'] %>.crt;
+  ssl_certificate_key /etc/nginx/ssl/<%= node['samplecompany-apiold']['lb_name'] %>.key;
+  ssl_client_certificate /etc/nginx/ssl/<%= node['samplecompany-apiold']['lb_name'] %>.ca;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+  
+  rewrite ^/gadget((_[a-z]+)*)/([A-Za-z0-9_]+)/([A-Za-z0-9_]+) /gadget$1/GameProxy.php?platform=$3&game=$4 last;
+  
+  location ~ .php$ {
+    include /etc/nginx/fastcgi_params;
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+  
+  # Block all svn access
+  if ($request_uri ~* ^.*\.svn.*$) {
+     return 404;
+  }
+  
+  # Block all git access
+  if ($request_uri ~* ^.*\.git.*$) {
+     return 404;
+  }
+}

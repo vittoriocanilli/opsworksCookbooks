@@ -1,0 +1,5 @@
+name             "samplecompany-apiold"
+depends          "samplecompany-webserver"
+depends          "samplecompany-common"
+depends          "samplecompany-gadget"
+depends          "logrotate"
