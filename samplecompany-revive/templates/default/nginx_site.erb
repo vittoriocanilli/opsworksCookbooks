@@ -1,0 +1,44 @@
+<%# This is the nginx site configuration file for revive %>
+
+server {
+  listen 80;
+  listen 443 default ssl;
+  ssl_certificate /etc/nginx/ssl/<%= @ssl_cert_name %>.crt;
+  ssl_certificate_key /etc/nginx/ssl/<%= @ssl_cert_name %>.key;
+  ssl_client_certificate /etc/nginx/ssl/<%= @ssl_cert_name %>.ca;
+  ssl_protocols TLSv1 TLSv1.1 TLSv1.2;
+  server_name <%= @server_name.each{|name| "#{name}" }.join(" ") %> samplecompany_revive;
+  access_log off;
+
+  root <%= File.join(@app_dir, 'current') %>;
+  index index.html index.htm index.php;
+
+  location ~ ^(.*)\.php$ {
+    include /etc/nginx/fastcgi_params; #or whatever you named it
+    fastcgi_pass unix:/var/run/php5-fpm.sock;
+    fastcgi_index index.php;
+    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+  }
+
+  # Block all svn access
+  if ($request_uri ~* ^.*\.svn.*$) {
+    return 404;
+  }
+
+  # Block all git access
+  if ($request_uri ~* ^.*\.git.*$) {
+    return 404;
+  }
+
+  location /nginx_status {
+    stub_status on;
+    access_log off;
+    allow 127.0.0.1;
+    deny all;
+  }
+
+  location = /favicon.ico { access_log off; log_not_found off; }
+  location ~ /\. { access_log off; log_not_found off; deny all; }
+  location ~ ~$ { access_log off; log_not_found off; deny all; }
+
+}

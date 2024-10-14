@@ -1,0 +1,8 @@
+#!/bin/bash
+rc=$(wget --server-response http://<%= @lb_name %>/check.php 2>&1 | awk '/^  HTTP/{print $2}')
+rm check.php.*
+if [ $rc -ne 200 ]; then
+  /etc/init.d/php5-fpm restart
+  /etc/init.d/nginx restart
+#  /etc/init.d/haproxy reload
+fi
